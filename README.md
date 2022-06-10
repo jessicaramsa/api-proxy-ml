@@ -7,14 +7,13 @@ Proyecto para implementar un proxy que actúe como intermediario entre el API de
 - [Metas](#metas)
 - [Visión general](#visión-general)
 - [Diseño](#diseño)
+  - [Escalabilidad](#escalabilidad)
 - [Implementación](#implementación)
   - [Instalación](#instalación)
   - [Configuración](#configuración)
-  - [Estructura del proyecto](#estructura-del-proyecto)
-  - [Migraciones](#migraciones)
   - [Ejecución](#ejecución)
-- [Escalabilidad](#escalabilidad)
-- [Notas](#notas)
+  - [Pruebas](#pruebas)
+  - [Estructura del proyecto](#estructura-del-proyecto)
 
 ## Problemática
 Mercado Libre corre sus aplicaciones en más de 20,000 servidores, los cuales suelen comunicarse entre sí a través de API's y solo algunas son accesibles desde el exterior.
@@ -69,6 +68,21 @@ Las tecnologías utilizadas:
 - [PM2](https://pm2.keymetrics.io/)
 - Database MySQL
 
+### Escalabilidad
+La solución actual se enfoca en la funcionalidad principal para realizar el proxy, sin embargo, se puede llegar a escalar la solución a medida que las necesidades del negocio crezcan, además, de tener una arquitectura mucho más robusta.
+
+El proxy podría recibir una carga de request/segundo que pueda llegar a un punto en el que se presente demasiada latencia, o bien, que el servicio presente caídas a medida que la cantidad de request/segundo vaya incrementando. Por lo que se piensa que a mediano plazo, se escale el proyecto a una arquitectura más robusta donde permita que la función del proxy ya existente se lleve a contenedores Docker.
+
+Esto permitirá que por una parte la implementación se pueda llevar con facilidad a otro servidor y se pueda implementar una solución escalable de alta disponibilidad en el servicio a largo plazo. Como una de las primeras ventajas que ofrecería implementar el contenedor, sería la seguridad de la aplicación ya que se estaría aislando el proyecto del resto de procesos que estén ejecutándose en el servidor donde se despliegue. Independientemente del proceso que se despliegue, el contenedor se encargará de la ejecución del proxy y será una eficiencia en los tiempos de despliegue y configuración.
+
+Una de las cosas a agregar, antes de que el resto de servidores se comuniquen con el proxy, será un balanceador de cargas para el servidor que puede ser implementado de distintas maneras dependiendo el proveedor en la nube que se utilice para realizar el host de la aplicación. Es importante considerar este balanceador de cargas en momentos en los que la aplicación necesite una alta disponibilidad.
+
+Al igual que el servidor host para el proxy, se podría implementar un balanceador de cargas para el cluster de la base de datos. Este balanceador de cargas se encargará de distribuir la carga hacia la base de datos de acuerdo a la cantidad de transacciones que se realicen y/o el número de conexiones hacia la base de datos.
+
+![Diagrama de arquitectura escalable](https://github.com/jessicaramsa/api-proxy-ml/blob/main/resources/imgs/scalability.png?raw=true)
+
+Las conexiones de escritura hacia la base de datos representarían una baja carga, por lo que, las conexiones de lectura se someterían a monitoreo que permita decidir la cantidad de réplicas que se podrían llegar a manejar para tener una alta disponibilidad de los datos. Además, permitiría que las estadísticas de uso se puedan mostrar en la debida interfaz sin generar cuellos de botella por consumir altos volúmenes de datos.
+
 ## Implementación
 
 ### Instalación
@@ -110,6 +124,18 @@ npm start
 ```bash
 pm2 start ecosystem.config.js
 pm2 show api-proxy
+pm2 save
+```
+
+### Pruebas
+Para realizar las pruebas de una manera sencilla y comprobar que el proxy esté funcionando, se podría ejecutar el script localizado en la carpeta de `test`.
+```bash
+sh test/makeRequest.sh
+```
+
+El script contiene el siguiente un comando que permite realizar peticiones a una ruta específica del API.
+```bash
+xargs -I % -P 10 curl -X GET -s -I "http://35.239.34.151:8080/categories/MLA1071" < <(printf '%s\n' {1..50000})
 ```
 
 ### Estructura del proyecto
@@ -122,7 +148,6 @@ pm2 show api-proxy
  ┃ ┃ ┗ 📜scalability.png
  ┣ 📦test
  ┃ ┣ 📜makeRequests.sh
- ┃ ┗ 📜requests.txt
  ┣ 📂src
  ┃ ┗ 📜index.js
  ┣ 📜.env
@@ -132,18 +157,3 @@ pm2 show api-proxy
  ┣ 📜package.json
  ┗ 📜README.md
 ```
-
-## Escalabilidad
-La solución actual se enfoca en la funcionalidad principal para realizar el proxy, sin embargo, se puede llegar a escalar la solución a medida que las necesidades del negocio crezcan, además, de tener una arquitectura mucho más robusta.
-
-El proxy podría recibir una carga de request/segundo que pueda llegar a un punto en el que se presente demasiada latencia, o bien, que el servicio presente caídas a medida que la cantidad de request/segundo vaya incrementando. Por lo que se piensa que a mediano plazo, se escale el proyecto a una arquitectura más robusta donde permita que la función del proxy ya existente se lleve a contenedores Docker.
-
-Esto permitirá que por una parte la implementación se pueda llevar con facilidad a otro servidor y se pueda implementar una solución escalable de alta disponibilidad en el servicio a largo plazo. Como una de las primeras ventajas que ofrecería implementar el contenedor, sería la seguridad de la aplicación ya que se estaría aislando el proyecto del resto de procesos que estén ejecutándose en el servidor donde se despliegue. Independientemente del proceso que se despliegue, el contenedor se encargará de la ejecución del proxy y será una eficiencia en los tiempos de despliegue y configuración.
-
-Una de las cosas a agregar, antes de que el resto de servidores se comuniquen con el proxy, será un balanceador de cargas para el servidor que puede ser implementado de distintas maneras dependiendo el proveedor en la nube que se utilice para realizar el host de la aplicación. Es importante considerar este balanceador de cargas en momentos en los que la aplicación necesite una alta disponibilidad.
-
-Al igual que el servidor host para el proxy, se podría implementar un balanceador de cargas para el cluster de la base de datos. Este balanceador de cargas se encargará de distribuir la carga hacia la base de datos de acuerdo a la cantidad de transacciones que se realicen y/o el número de conexiones hacia la base de datos.
-
-![Diagrama de arquitectura escalable](https://github.com/jessicaramsa/api-proxy-ml/blob/main/resources/imgs/scalability.png?raw=true)
-
-Las conexiones de escritura hacia la base de datos representarían una baja carga, por lo que, las conexiones de lectura se someterían a monitoreo que permita decidir la cantidad de réplicas que se podrían llegar a manejar para tener una alta disponibilidad de los datos. Además, permitiría que las estadísticas de uso se puedan mostrar en la debida interfaz sin generar cuellos de botella por consumir altos volúmenes de datos.
